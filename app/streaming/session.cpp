@@ -1231,7 +1231,8 @@ bool Session::validateLaunch(SDL_Window* testWindow)
     // H.264 encoders cannot produce images wider or taller than 4096 pixels,
     // which a dual monitor image usually is. Prefer HEVC or AV1 in that case.
     if (m_SpanMode && (m_StreamConfig.width > 4096 || m_StreamConfig.height > 4096)) {
-        if (m_SupportedVideoFormats & ~VIDEO_FORMAT_MASK_H264) {
+        // Only drop H.264 if this PC and the host share another codec
+        if (m_SupportedVideoFormats.maskByServerCodecModes(m_Computer->serverCodecModeSupport) & ~VIDEO_FORMAT_MASK_H264) {
             m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_H264);
         }
         else {
