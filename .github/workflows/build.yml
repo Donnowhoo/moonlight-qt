@@ -63,8 +63,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ls -l artifacts
+          (cd artifacts && zip -qr ../Moonlight-DualMonitor-Windows-x64-portable.zip .)
           gh release delete dual-monitor-latest -R "${{ github.repository }}" --yes --cleanup-tag || true
-          gh release create dual-monitor-latest artifacts/* \
+          gh release create dual-monitor-latest Moonlight-DualMonitor-Windows-x64-portable.zip \
             -R "${{ github.repository }}" \
             --prerelease \
             --target "${{ github.sha }}" \
