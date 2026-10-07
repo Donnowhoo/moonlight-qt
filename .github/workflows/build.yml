@@ -43,3 +43,30 @@ jobs:
     uses: ./.github/workflows/build-win-mac.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+
+  publish-dual-monitor:
+    if: github.ref == 'refs/heads/dual-monitor'
+    needs: [setup, build-windows-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+          pattern: Moonlight-Windows-x64-*
+          merge-multiple: true
+
+      - name: Publish dual monitor release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -l artifacts
+          gh release delete dual-monitor-latest -R "${{ github.repository }}" --yes --cleanup-tag || true
+          gh release create dual-monitor-latest artifacts/* \
+            -R "${{ github.repository }}" \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Moonlight dual monitor build (${{ needs.setup.outputs.ci_version }})" \
+            --notes "Moonlight with dual monitor mode. Install on the client PC."
