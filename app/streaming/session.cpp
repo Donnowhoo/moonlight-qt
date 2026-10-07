@@ -2,6 +2,7 @@
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
+#include "backend/nvhttp.h"
 
 #include <Limelight.h>
 #include "SDL_compat.h"
@@ -40,6 +41,9 @@
 #include <QGuiApplication>
 #include <QCursor>
 #include <QScreen>
+#include <QUrl>
+
+#include <algorithm>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QQuickOpenGLUtils>
@@ -567,6 +571,8 @@ bool Session::populateDecoderProperties(SDL_Window* window)
 Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
     : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
+      m_SpanMode(false),
+      m_SpanWindowRect({0, 0, 0, 0}),
       m_Computer(computer),
       m_App(app),
       m_Window(nullptr),
@@ -659,6 +665,9 @@ bool Session::initialize(QQuickWindow* qtWindow)
     m_StreamConfig.width = m_Preferences->width;
     m_StreamConfig.height = m_Preferences->height;
 
+    // Dual monitor mode overrides the stream size and window placement
+    setupSpanMode();
+
     int x, y, width, height;
     getWindowDimensions(x, y, width, height);
 
@@ -680,6 +689,21 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
+
+    if (m_SpanMode) {
+        // The bitrate setting was chosen for a single monitor. Make sure the
+        // much larger dual monitor image gets at least its default bitrate.
+        int spanBitrate = StreamingPreferences::getDefaultBitrate(m_StreamConfig.width,
+                                                                  m_StreamConfig.height,
+                                                                  m_StreamConfig.fps,
+                                                                  m_Preferences->enableYUV444);
+        if (spanBitrate > m_StreamConfig.bitrate) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Dual monitor mode: raising bitrate from %d to %d kbps",
+                        m_StreamConfig.bitrate, spanBitrate);
+            m_StreamConfig.bitrate = spanBitrate;
+        }
+    }
 
 #ifndef STEAM_LINK
     // Opt-in to all encryption features if we detect that the platform
@@ -1204,6 +1228,17 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         emitLaunchWarning(tr("An attached gamepad has no mapping and won't be usable. Visit the Moonlight help to resolve this."));
     }
 
+    // H.264 encoders cannot produce images wider or taller than 4096 pixels,
+    // which a dual monitor image usually is. Prefer HEVC or AV1 in that case.
+    if (m_SpanMode && (m_StreamConfig.width > 4096 || m_StreamConfig.height > 4096)) {
+        if (m_SupportedVideoFormats & ~VIDEO_FORMAT_MASK_H264) {
+            m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_H264);
+        }
+        else {
+            emitLaunchWarning(tr("Dual monitor mode needs the HEVC or AV1 codec. Change the video codec setting to Automatic."));
+        }
+    }
+
     // If we removed all codecs with the checks above, use H.264 as the codec of last resort.
     if (m_SupportedVideoFormats.empty()) {
         m_SupportedVideoFormats.append(VIDEO_FORMAT_H264);
@@ -1315,9 +1350,107 @@ private:
     Session* m_Session;
 };
 
+void Session::setupSpanMode()
+{
+    m_SpanMode = false;
+    m_SpanClientLayout.clear();
+
+    if (!m_Preferences->spanAllDisplays || !WMUtils::isRunningDesktopEnvironment()) {
+        return;
+    }
+
+    // Collect the client monitors from left to right
+    QVector<SDL_Rect> clientDisplays;
+    for (int i = 0; i < SDL_GetNumVideoDisplays(); i++) {
+        SDL_Rect bounds;
+        if (SDL_GetDisplayBounds(i, &bounds) == 0) {
+            clientDisplays.append(bounds);
+        }
+    }
+    if (clientDisplays.size() < 2) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Dual monitor mode: only one client monitor, using a single monitor");
+        return;
+    }
+    std::sort(clientDisplays.begin(), clientDisplays.end(),
+              [](const SDL_Rect& a, const SDL_Rect& b) {
+        return a.x != b.x ? a.x < b.x : a.y < b.y;
+    });
+
+    // Ask the host how many monitors it can combine. Only the dual monitor
+    // build of Sunshine reports this, so other hosts keep the normal mode.
+    int hostDisplayCount = 0;
+    try {
+        NvHTTP http(m_Computer);
+        QString serverInfo = http.getServerInfo(NvHTTP::NVLL_ERROR, true);
+        QString hostLayout = NvHTTP::getXmlString(serverInfo, "SunshineDisplayLayout");
+        for (const QString& rect : hostLayout.split(';')) {
+            if (rect.split(',').size() == 4) {
+                hostDisplayCount++;
+            }
+        }
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Dual monitor mode: host display layout '%s'",
+                    qPrintable(hostLayout));
+    } catch (const GfeHttpResponseException&) {
+    } catch (const QtNetworkReplyException&) {
+    }
+
+    if (hostDisplayCount < 2) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Dual monitor mode: host does not offer multiple monitors, using a single monitor");
+        return;
+    }
+
+    // Host monitors are paired with client monitors from left to right
+    clientDisplays.resize(qMin((int)clientDisplays.size(), hostDisplayCount));
+
+    int left = clientDisplays.first().x;
+    int top = clientDisplays.first().y;
+    int right = left + clientDisplays.first().w;
+    int bottom = top + clientDisplays.first().h;
+    for (const SDL_Rect& bounds : std::as_const(clientDisplays)) {
+        left = qMin(left, bounds.x);
+        top = qMin(top, bounds.y);
+        right = qMax(right, bounds.x + bounds.w);
+        bottom = qMax(bottom, bounds.y + bounds.h);
+    }
+    SDL_Rect area = {left, top, right - left, bottom - top};
+
+    QStringList layout;
+    for (const SDL_Rect& bounds : std::as_const(clientDisplays)) {
+        layout.append(QString("%1,%2,%3,%4")
+                          .arg(bounds.x - area.x)
+                          .arg(bounds.y - area.y)
+                          .arg(bounds.w)
+                          .arg(bounds.h));
+    }
+
+    m_SpanMode = true;
+    m_SpanWindowRect = area;
+    m_SpanClientLayout = layout.join(';');
+    m_IsFullScreen = false;
+    m_StreamConfig.width = area.w;
+    m_StreamConfig.height = area.h;
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Dual monitor mode: streaming %dx%d across %d monitors (%s)",
+                area.w, area.h, (int)clientDisplays.size(),
+                qPrintable(m_SpanClientLayout));
+}
+
 void Session::getWindowDimensions(int& x, int& y,
                                   int& width, int& height)
 {
+    if (m_SpanMode) {
+        // Cover every client monitor used by dual monitor mode
+        x = m_SpanWindowRect.x;
+        y = m_SpanWindowRect.y;
+        width = m_SpanWindowRect.w;
+        height = m_SpanWindowRect.h;
+        return;
+    }
+
     int displayIndex = 0;
 
     if (m_Window != nullptr) {
@@ -1504,6 +1637,11 @@ void Session::updateOptimalWindowDisplayMode()
 
 void Session::toggleFullscreen()
 {
+    // The dual monitor window always covers every monitor
+    if (m_SpanMode) {
+        return;
+    }
+
     bool fullScreen = !(SDL_GetWindowFlags(m_Window) & m_FullScreenFlag);
 
 #if defined(Q_OS_WIN32) || defined(Q_OS_DARWIN)
@@ -1609,6 +1747,12 @@ bool Session::startConnectionAsync()
 
     QString rtspSessionUrl;
 
+    QString extraLaunchParameters;
+    if (m_SpanMode) {
+        extraLaunchParameters = "&sunshineSpanDisplays=1&sunshineSpanLayout=" +
+                                QString::fromLatin1(QUrl::toPercentEncoding(m_SpanClientLayout));
+    }
+
     try {
         NvHTTP http(m_Computer);
         http.startApp(m_Computer->currentGameId != 0 ? "resume" : "launch",
@@ -1618,7 +1762,8 @@ bool Session::startConnectionAsync()
                       m_Preferences->playAudioOnHost,
                       m_InputHandler->getAttachedGamepadMask(),
                       !m_Preferences->multiController,
-                      rtspSessionUrl);
+                      rtspSessionUrl,
+                      extraLaunchParameters);
     } catch (const GfeHttpResponseException& e) {
         emit displayLaunchError(tr("Host returned error: %1").arg(e.toQString()));
         return false;
@@ -1757,6 +1902,10 @@ void Session::start()
     // Initialize the gamepad code with our preferences
     // NB: m_InputHandler must be initialize before starting the connection.
     m_InputHandler = new SdlInputHandler(*m_Preferences, m_StreamConfig.width, m_StreamConfig.height);
+    if (m_SpanMode) {
+        // The local cursor must be free to cross between monitors
+        m_InputHandler->forceAbsoluteMouseMode();
+    }
 
     // Kick off the async connection thread then return to the caller to pump the event loop
     auto thread = new AsyncConnectionStartThread(this);
@@ -1816,9 +1965,13 @@ void Session::exec()
     // We always want a resizable window with High DPI enabled
     Uint32 defaultWindowFlags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 
+    if (m_SpanMode) {
+        // A borderless window placed over every client monitor
+        defaultWindowFlags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_BORDERLESS;
+    }
     // If we're starting in windowed mode and the Moonlight GUI is maximized or
     // minimized, match that with the streaming window.
-    if (!m_IsFullScreen && m_QtWindow != nullptr) {
+    else if (!m_IsFullScreen && m_QtWindow != nullptr) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
         // Qt 5.10+ can propagate multiple states together
         if (m_QtWindow->windowStates() & Qt::WindowMaximized) {
@@ -1915,7 +2068,7 @@ void Session::exec()
     // We still capture in windowed absolute mode because it doesn't
     // constrain the motion of the cursor. This allows the user to
     // easily reposition or resize the window.
-    if (m_IsFullScreen || m_Preferences->absoluteMouseMode) {
+    if (m_IsFullScreen || m_Preferences->absoluteMouseMode || m_SpanMode) {
         // HACK: For Wayland, we wait until we get the first SDL_WINDOWEVENT_ENTER
         // event where it seems to work consistently on GNOME. For other platforms,
         // especially where SDL may call SDL_RecreateWindow(), we must only capture

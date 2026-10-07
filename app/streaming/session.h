@@ -165,6 +165,10 @@ private:
     void getWindowDimensions(int& x, int& y,
                              int& width, int& height);
 
+    // Dual monitor mode: decide whether to stream all host monitors across
+    // all client monitors and prepare the stream size and window area.
+    void setupSpanMode();
+
     void toggleFullscreen();
 
     void notifyMouseEmulationMode(bool enabled);
@@ -245,6 +249,9 @@ private:
 
     StreamingPreferences* m_Preferences;
     bool m_IsFullScreen;
+    bool m_SpanMode;            // Dual monitor mode is active for this session
+    SDL_Rect m_SpanWindowRect;  // Area covering all client monitors used by dual monitor mode
+    QString m_SpanClientLayout; // Client monitor layout sent to Sunshine
     SupportedVideoFormatList m_SupportedVideoFormats; // Sorted in order of descending priority
     STREAM_CONFIGURATION m_StreamConfig;
     DECODER_RENDERER_CALLBACKS m_VideoCallbacks;

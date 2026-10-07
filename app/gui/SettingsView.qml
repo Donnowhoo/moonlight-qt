@@ -812,6 +812,23 @@ Flickable {
                     ToolTip.text: qsTr("Fullscreen generally provides the best performance, but borderless windowed may work better with features like macOS Spaces, Alt+Tab, screenshot tools, on-screen overlays, etc.")
                 }
 
+                CheckBox {
+                    id: spanAllDisplaysCheck
+                    width: parent.width
+                    visible: SystemProperties.hasDesktopEnvironment
+                    text: qsTr("듀얼 모니터 모드 (Dual monitor mode)")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.spanAllDisplays
+                    onCheckedChanged: {
+                        StreamingPreferences.spanAllDisplays = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 8000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("When this PC and the host both have two or more monitors, every host monitor is shown on its own monitor here and the mouse moves freely between them. Requires the dual monitor build of Sunshine. With one monitor, streaming works as usual.")
+                }
+
                 Row {
                     spacing: 5
                     width: parent.width

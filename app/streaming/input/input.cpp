@@ -270,6 +270,11 @@ void SdlInputHandler::setWindow(SDL_Window *window)
     m_Window = window;
 }
 
+void SdlInputHandler::forceAbsoluteMouseMode()
+{
+    m_AbsoluteMouseMode = true;
+}
+
 void SdlInputHandler::notifyFocusLost()
 {
     // Release mouse cursor when another window is activated (e.g. by using ALT+TAB).

@@ -90,6 +90,9 @@ public:
 
     void setWindow(SDL_Window* window);
 
+    // Used by dual monitor mode, where the mouse must move freely between monitors
+    void forceAbsoluteMouseMode();
+
     void handleKeyEvent(SDL_KeyboardEvent* event);
 
     void handleMouseButtonEvent(SDL_MouseButtonEvent* event);
