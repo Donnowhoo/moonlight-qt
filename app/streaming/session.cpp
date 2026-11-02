@@ -691,13 +691,20 @@ bool Session::initialize(QQuickWindow* qtWindow)
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
 
     if (m_SpanMode) {
-        // The bitrate setting was chosen for a single monitor. Make sure the
+        // The automatic bitrate was chosen for a single monitor. Make sure the
         // much larger dual monitor image gets at least its default bitrate.
+        // A bitrate the user picked by hand (for example to suit a slow Wi-Fi
+        // network) is kept as it is.
         int spanBitrate = StreamingPreferences::getDefaultBitrate(m_StreamConfig.width,
                                                                   m_StreamConfig.height,
                                                                   m_StreamConfig.fps,
                                                                   m_Preferences->enableYUV444);
-        if (spanBitrate > m_StreamConfig.bitrate) {
+        if (!m_Preferences->autoAdjustBitrate) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Dual monitor mode: keeping the manually chosen bitrate of %d kbps (default for this size: %d kbps)",
+                        m_StreamConfig.bitrate, spanBitrate);
+        }
+        else if (spanBitrate > m_StreamConfig.bitrate) {
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                         "Dual monitor mode: raising bitrate from %d to %d kbps",
                         m_StreamConfig.bitrate, spanBitrate);
