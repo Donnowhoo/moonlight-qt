@@ -243,6 +243,7 @@ private:
     int m_StreamWidth;
     int m_StreamHeight;
     bool m_AbsoluteMouseMode;
+    bool m_AbsoluteMouseModeForced = false;
     bool m_AbsoluteTouchMode;
     bool m_DisabledTouchFeedback;
 

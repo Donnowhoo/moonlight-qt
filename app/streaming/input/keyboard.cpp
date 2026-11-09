@@ -68,6 +68,13 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         break;
 
     case KeyComboToggleMouseMode:
+        // Spanned displays require absolute coordinates for host monitor mapping.
+        if (m_AbsoluteMouseModeForced) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Dual monitor mode: keeping absolute mouse mode");
+            break;
+        }
+
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected mouse mode toggle combo");
 

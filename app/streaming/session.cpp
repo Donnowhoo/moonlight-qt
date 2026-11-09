@@ -1401,7 +1401,13 @@ void Session::setupSpanMode()
                     "Dual monitor mode: host display layout '%s'",
                     qPrintable(hostLayout));
     } catch (const GfeHttpResponseException&) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Dual monitor mode: host rejected display layout request, using a single monitor");
+        return;
     } catch (const QtNetworkReplyException&) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Dual monitor mode: network error requesting display layout, using a single monitor");
+        return;
     }
 
     if (hostDisplayCount < 2) {

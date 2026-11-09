@@ -272,6 +272,7 @@ void SdlInputHandler::setWindow(SDL_Window *window)
 
 void SdlInputHandler::forceAbsoluteMouseMode()
 {
+    m_AbsoluteMouseModeForced = true;
     m_AbsoluteMouseMode = true;
 }
 
