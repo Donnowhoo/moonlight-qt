@@ -1,5 +1,24 @@
 # Windows 터치 로그 부재 재조사 — 진단 보완판
 
+## 승인된 배포 결과 (2026-11-11 한국 시간)
+
+- 기능 커밋 `78467bfb73b2b8d6c6849846e933d8a8da5c5f9c`, dual-monitor commit/push 완료.
+- [GitHub Actions 42847760460](https://github.com/Donnowhoo/moonlight-qt/actions/runs/42847760460) 성공. Windows x64만 빌드. MSVC 입력 정책 38개, Python 보호 검사 13개, 독립 진단 파일 테스트(즉시 flush/한글 경로/용량 제한/열기 실패) 모두 통과.
+- 릴리스 `dual-monitor-latest` targetCommitish가 위 기능 커밋과 일치하는 것 확인.
+- 파일: `C:\Users\Han\OneDrive\Desktop\RemoteControl\듀얼모니터_빌드\Moonlight-Touch-Diagnostic-Windows-x64-78467bfb-20261111-portable.zip`
+- 크기 38,209,676 bytes. SHA256 `0552571fbcff51fbb8b9e58d19835e35ba9d0e45eb1dc9c9cfd1192444375b30` (GitHub asset digest 일치).
+- ZIP 전체 CRC 성공. Moonlight.exe, SDL2.dll, SDL3.dll, SDL2_ttf.dll, vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll 포함 및 모두 PE x64 확인. 새 진단 문자열 포함 확인. **DLL 로드나 앱 실행 없이 읽기만 했다.**
+- CI 증거: 프로젝트 루트 `evidence/touch-build-2026-11-11/windows-78467bfb-tests.txt`.
+- 결과 문서만 후속 `[skip ci]` 커밋으로 게시한다. 다운로드 파일 소스는 위 기능 커밋이며, 갤럭시북 문제 해결은 아직 미검증이다.
+
+### David가 할 일
+
+1. 갤럭시북의 새 폴더에 ZIP **전체**를 압축 해제한다. Moonlight.exe만 따로 이동하지 않는다. 함께 있는 SDL DLL/Qt 폴더를 유지한다.
+2. 새 폴더의 Moonlight.exe로 접속하고 두/세 손가락 동작을 시도한다.
+3. 바에서 **더보기 → 진단 로그**를 누르고 열린 파일을 채팅에 첨부한다. 그 버튼이 없으면 우선 그 사실을 알려준다.
+4. 버튼으로 열리지 않으면 `%TEMP%`의 `Moonlight-touch-input-*.log` 중 이번 시각 파일을 첨부한다. 기존 `Moonlight-*.log`와 별개의 진단이다.
+5. SDL 오류가 갤럭시북에서도 뜨면 정확한 문구/파일명을 알려준다. 호스트에는 SDL 설치나 Sunshine 재설치가 필요 없다.
+
 ## 사용자 확인과 남은 문제
 
 David는 `7de2df76` 새 파일로 실행했음을 확인했다. 두/세 손가락 무반응 지속, 한 손가락 이동은 드래그, 일반 로그에서 `Desktop touch input:`이 보이지 않는다. 다른 실행 파일을 사용했다고 추정하지 않는다.
@@ -32,8 +51,8 @@ David가 호스트 PC에서 SDL 3이 없다는 취지의 오류 창을 봤다고
 
 - 독립 C++ 진단 파일 테스트: 실행 중 flush, 한글 경로, 길이/줄 수 제한, 미오픈/열기 실패 처리 통과. Windows/SDL/Qt 창이나 네트워크 없이 workspace 내부 시험 파일만 사용.
 - Python 정적 보호 검사 13개 통과.
-- 변경 C++의 g++ `-fsyntax-only` 검사 통과. 전체 앱 빌드/링크 및 실제 Galaxy Book 관측은 미실시.
-- GitHub의 기존 x64 테스트 배치에 새 독립 파일 테스트를 연결했지만 이번에는 CI를 실행하지 않았다.
+- 변경 C++의 g++ `-fsyntax-only` 검사 통과. 후속 GitHub MSVC 앱 빌드/링크도 성공. 실제 Galaxy Book 관측은 미실시.
+- GitHub x64 테스트 배치에 새 독립 파일 테스트를 연결했고 위 승인된 CI에서 통과했다.
 
 ## 다음 관측의 해석
 
