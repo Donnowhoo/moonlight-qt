@@ -32,6 +32,11 @@ jobs:
         if: runner.os == 'Windows'
         run: powershell ./setup-deps.ps1
 
+      - name: Test desktop touch policy and integration guards (Windows x64)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: scripts\test-desktop-touch.bat
+
       - name: Install create-dmg (macOS)
         if: runner.os == 'macOS'
         run: |

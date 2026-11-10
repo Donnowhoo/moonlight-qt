@@ -153,6 +153,8 @@ void StreamingPreferences::reload()
     swapFaceButtons = settings.value(SER_SWAPFACEBUTTONS, false).toBool();
     keepAwake = settings.value(SER_KEEPAWAKE, true).toBool();
     spanAllDisplays = settings.value(SER_SPANALLDISPLAYS, false).toBool();
+    desktopTouchToolbar = settings.value("desktoptouchtoolbar", false).toBool();
+    desktopTouchDrag = settings.value("desktoptouchdrag", false).toBool();
     enableHdr = settings.value(SER_HDR, false).toBool();
     captureSysKeysMode = static_cast<CaptureSysKeysMode>(settings.value(SER_CAPTURESYSKEYS,
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
@@ -365,6 +367,8 @@ void StreamingPreferences::save()
     settings.setValue(SER_CAPTURESYSKEYS, captureSysKeysMode);
     settings.setValue(SER_KEEPAWAKE, keepAwake);
     settings.setValue(SER_SPANALLDISPLAYS, spanAllDisplays);
+    settings.setValue("desktoptouchtoolbar", desktopTouchToolbar);
+    settings.setValue("desktoptouchdrag", desktopTouchDrag);
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)

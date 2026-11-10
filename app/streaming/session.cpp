@@ -957,6 +957,12 @@ bool Session::initialize(QQuickWindow* qtWindow)
         break;
     }
 
+#ifdef Q_OS_WIN32
+    // Owned non-activating controls require composited (not exclusive) fullscreen.
+    // This is session-local and leaves the saved window/mouse preferences intact.
+    if (m_Preferences->desktopTouchToolbar || m_Preferences->desktopTouchDrag)
+        m_FullScreenFlag = SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
 #if !SDL_VERSION_ATLEAST(2, 0, 11)
     // HACK: Using a full-screen window breaks mouse capture on the Pi's LXDE
     // GUI environment. Force the session to use windowed mode (which won't
@@ -2131,6 +2137,7 @@ void Session::exec()
     // because we want to suspend all Qt processing until the stream is over.
     SDL_Event event;
     for (;;) {
+        m_InputHandler->pollDesktopTouch();
 #if SDL_VERSION_ATLEAST(2, 0, 18) && !defined(STEAM_LINK)
         // SDL 2.0.18 has a proper wait event implementation that uses platform
         // support to block on events rather than polling on Windows, macOS, X11,
@@ -2141,7 +2148,7 @@ void Session::exec()
         // NB: This behavior was introduced in SDL 2.0.16, but had a few critical
         // issues that could cause indefinite timeouts, delayed joystick detection,
         // and other problems.
-        if (!SDL_WaitEventTimeout(&event, 1000)) {
+        if (!SDL_WaitEventTimeout(&event, m_InputHandler->hasDesktopTouch() ? 16 : 1000)) {
             presence.runCallbacks();
             continue;
         }

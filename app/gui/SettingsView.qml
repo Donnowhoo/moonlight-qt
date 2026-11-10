@@ -1457,6 +1457,30 @@ Flickable {
                 }
 
                 CheckBox {
+                    visible: Qt.platform.os === "windows"
+                    width: parent.width
+                    text: qsTr("Windows 터치 단축키 바 (직접 터치·키보드·편집)")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.desktopTouchToolbar
+                    onCheckedChanged: StreamingPreferences.desktopTouchToolbar = checked
+                    hoverEnabled: true
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("터치 PC용. Ctrl/Shift/Alt는 끔→한 번→고정 순서입니다. 우클릭은 다음 터치에 적용됩니다. 창 전체화면으로 동작하며 재연결 후 적용됩니다.")
+                }
+
+                CheckBox {
+                    visible: Qt.platform.os === "windows"
+                    width: parent.width
+                    text: qsTr("Windows 터치 트랙패드 끌기 개선")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.desktopTouchDrag
+                    onCheckedChanged: StreamingPreferences.desktopTouchDrag = checked
+                    hoverEnabled: true
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("위의 가상 트랙패드를 켜세요. 두 번 탭 후 움직이거나 0.65초 길게 누르면 끌기가 시작되고 손을 떼면 끝납니다. 두 손가락 함께 이동은 스크롤, 한 손가락 고정+다른 손가락 이동은 왼쪽 끌기, 세 손가락 이동은 가운데 끌기입니다. 재연결 후 적용됩니다.")
+                }
+
+                CheckBox {
                     id: swapMouseButtonsCheck
                     hoverEnabled: true
                     width: parent.width

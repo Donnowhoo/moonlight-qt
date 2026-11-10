@@ -156,6 +156,8 @@ public:
     Q_PROPERTY(bool swapFaceButtons MEMBER swapFaceButtons NOTIFY swapFaceButtonsChanged)
     Q_PROPERTY(bool keepAwake MEMBER keepAwake NOTIFY keepAwakeChanged)
     Q_PROPERTY(bool spanAllDisplays MEMBER spanAllDisplays NOTIFY spanAllDisplaysChanged)
+    Q_PROPERTY(bool desktopTouchToolbar MEMBER desktopTouchToolbar NOTIFY desktopTouchToolbarChanged)
+    Q_PROPERTY(bool desktopTouchDrag MEMBER desktopTouchDrag NOTIFY desktopTouchDragChanged)
     Q_PROPERTY(CaptureSysKeysMode captureSysKeysMode MEMBER captureSysKeysMode NOTIFY captureSysKeysModeChanged)
     Q_PROPERTY(Language language MEMBER language NOTIFY languageChanged);
 
@@ -190,6 +192,8 @@ public:
     bool swapFaceButtons;
     bool keepAwake;
     bool spanAllDisplays;
+    bool desktopTouchToolbar;
+    bool desktopTouchDrag;
     int packetSize;
     AudioConfig audioConfig;
     VideoCodecConfig videoCodecConfig;
@@ -239,6 +243,8 @@ signals:
     void captureSysKeysModeChanged();
     void keepAwakeChanged();
     void spanAllDisplaysChanged();
+    void desktopTouchToolbarChanged();
+    void desktopTouchDragChanged();
     void languageChanged();
     void rendererSelectionChanged();
 

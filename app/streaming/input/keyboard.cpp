@@ -518,6 +518,13 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
         m_KeysDown.remove(MAKE_KEYPRESS_STATE(keyCode, modifiers, flags));
     }
 
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch) {
+        m_DesktopTouch->physicalKey(keyCode,
+            event->state == SDL_PRESSED ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifiers, flags);
+        return;
+    }
+#endif
     LiSendKeyboardEvent2(keyCode,
                          event->state == SDL_PRESSED ?
                              KEY_ACTION_DOWN : KEY_ACTION_UP,
@@ -527,6 +534,13 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
 
 void SdlInputHandler::raiseAllKeys()
 {
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch) {
+        m_DesktopTouch->reset();
+        m_KeysDown.clear();
+        return;
+    }
+#endif
     if (m_KeysDown.isEmpty()) {
         return;
     }

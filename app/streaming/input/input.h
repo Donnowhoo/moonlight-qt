@@ -4,6 +4,7 @@
 #include "backend/computermanager.h"
 
 #include "SDL_compat.h"
+#include "desktoptouch.h"
 
 struct GamepadState {
     SDL_GameController* controller;
@@ -155,10 +156,20 @@ public:
 
     void updatePointerRegionLock();
 
+    void pollDesktopTouch();
+    bool desktopAbsoluteMouseMode() const { return m_AbsoluteMouseMode; }
+    bool hasDesktopTouch() const;
+    void finishDesktopTouchClick();
+
     static
     QString getUnmappedGamepads();
 
 private:
+#ifdef Q_OS_WIN32
+    DesktopTouchController* m_DesktopTouch = nullptr;
+    bool m_DesktopToolbarEnabled = false;
+    bool m_DesktopTrackpadEnabled = false;
+#endif
     enum KeyCombo {
         KeyComboQuit,
         KeyComboUngrabInput,

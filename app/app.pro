@@ -390,6 +390,9 @@ config_SL {
 }
 win32 {
     HEADERS += streaming/video/ffmpeg-renderers/dxutil.h
+    SOURCES += streaming/input/desktoptouch.cpp
+    HEADERS += streaming/input/desktoptouch.h streaming/input/touchpolicy.h streaming/input/touchgestures.h
+    LIBS += shell32.lib
 }
 win32:!winrt {
     message(DXVA2 and D3D11VA renderers selected)

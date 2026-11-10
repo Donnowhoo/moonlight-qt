@@ -84,10 +84,16 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
             button = BUTTON_RIGHT;
     }
 
+    // End touch ownership before accepting a physical mouse button. A pending
+    // touch timer must never release a physical drag started afterwards.
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch) m_DesktopTouch->physicalMouse(button, event->state == SDL_PRESSED);
+#endif
     LiSendMouseButtonEvent(event->state == SDL_PRESSED ?
                                BUTTON_ACTION_PRESS :
                                BUTTON_ACTION_RELEASE,
                            button);
+    if (event->state == SDL_RELEASED) finishDesktopTouchClick();
 }
 
 void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)

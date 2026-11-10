@@ -36,6 +36,10 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
       m_NumFingersDown(0)
 {
     // System keys are always captured when running without a DE
+#ifdef Q_OS_WIN32
+    m_DesktopToolbarEnabled = prefs.desktopTouchToolbar;
+    m_DesktopTrackpadEnabled = prefs.desktopTouchDrag;
+#endif
     if (!WMUtils::isRunningDesktopEnvironment()) {
         m_CaptureSystemKeysMode = StreamingPreferences::CSK_ALWAYS;
     }
@@ -218,6 +222,10 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
 
 SdlInputHandler::~SdlInputHandler()
 {
+#ifdef Q_OS_WIN32
+    delete m_DesktopTouch;
+    m_DesktopTouch = nullptr;
+#endif
     for (int i = 0; i < MAX_GAMEPADS; i++) {
         if (m_GamepadState[i].mouseEmulationTimer != 0) {
             Session::get()->notifyMouseEmulationMode(false);
@@ -268,6 +276,40 @@ SdlInputHandler::~SdlInputHandler()
 void SdlInputHandler::setWindow(SDL_Window *window)
 {
     m_Window = window;
+#ifdef Q_OS_WIN32
+    if (m_DesktopToolbarEnabled || m_DesktopTrackpadEnabled) {
+        m_DesktopTouch = new DesktopTouchController(*this, window, m_DesktopToolbarEnabled,
+            m_DesktopTrackpadEnabled, m_AbsoluteTouchMode, m_StreamWidth, m_StreamHeight);
+        if (!m_DesktopTouch->valid()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Desktop touch bar creation failed; using original input");
+            delete m_DesktopTouch;
+            m_DesktopTouch = nullptr;
+        }
+    }
+#endif
+}
+
+bool SdlInputHandler::hasDesktopTouch() const
+{
+#ifdef Q_OS_WIN32
+    return m_DesktopTouch != nullptr;
+#else
+    return false;
+#endif
+}
+
+void SdlInputHandler::pollDesktopTouch()
+{
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch) m_DesktopTouch->tick();
+#endif
+}
+
+void SdlInputHandler::finishDesktopTouchClick()
+{
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch) m_DesktopTouch->finishClick();
+#endif
 }
 
 void SdlInputHandler::forceAbsoluteMouseMode()
@@ -358,6 +400,9 @@ bool SdlInputHandler::isSystemKeyCaptureActive()
 
 void SdlInputHandler::setCaptureActive(bool active)
 {
+#ifdef Q_OS_WIN32
+    if (!active && m_DesktopTouch) raiseAllKeys();
+#endif
     if (active) {
         // If we're in relative mode, try to activate SDL's relative mouse mode
         if (m_AbsoluteMouseMode || SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {
@@ -427,6 +472,9 @@ void SdlInputHandler::handleTouchFingerEvent(SDL_TouchFingerEvent* event)
     return;
 #endif
 
+#ifdef Q_OS_WIN32
+    if (m_DesktopTouch && m_DesktopTouch->finger(event)) return;
+#endif
     if (m_AbsoluteTouchMode) {
         handleAbsoluteFingerEvent(event);
     }
