@@ -5,6 +5,12 @@
 
 // No SDL, Qt, clock, or network dependencies: callers supply time and an output sink.
 namespace DesktopTouch {
+// WM_TOUCH already owns both touch and pen input on the shortcut window.
+// Bit 7 distinguishes touch from pen; the low byte is not part of the signature.
+constexpr bool isPointerPromotedMouse(uintptr_t extraInfo) {
+    return (extraInfo & 0xFFFFFF00u) == 0xFF515700u;
+}
+
 class KeyOwners {
 public:
     enum Owner { Physical = 1, Toolbar = 2, Shortcut = 4 };

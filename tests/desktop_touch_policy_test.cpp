@@ -12,6 +12,17 @@ int main()
 {
     int tests = 0;
     {
+        // Windows sets bit 7 for touch. Both promoted sources must be ignored
+        // after WM_TOUCH, while real mouse input must still operate the bar.
+        for (uintptr_t id = 0; id < 128; ++id) {
+            assert(DesktopTouch::isPointerPromotedMouse(0xFF515780u | id));
+            assert(DesktopTouch::isPointerPromotedMouse(0xFF515700u | id));
+        }
+        assert(!DesktopTouch::isPointerPromotedMouse(0));
+        assert(!DesktopTouch::isPointerPromotedMouse(0x12345678));
+        ++tests;
+    }
+    {
         D d; std::vector<D::Action> out;
         auto sink = [&](D::Action a) { out.push_back(a); };
         d.down(0, sink); d.up(50, sink); d.tick(229, sink);

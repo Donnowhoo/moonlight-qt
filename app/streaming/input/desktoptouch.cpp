@@ -54,12 +54,44 @@ DesktopTouchController::DesktopTouchController(SdlInputHandler& input, SDL_Windo
     if (!m_Bar) return;
     RegisterTouchWindow(m_Bar, 0);
     layout();
+    SDL_version version{};
+    SDL_GetVersion(&version);
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+        "Desktop touch input: SDL=%u.%u.%u toolbar=%d trackpad=%d direct=%d streamTouchRegistered=%d",
+        unsigned(version.major), unsigned(version.minor), unsigned(version.patch),
+        int(m_Toolbar), int(m_Trackpad), int(m_AbsoluteTouch), int(IsTouchWindow(m_Owner, nullptr)));
 }
 
 DesktopTouchController::~DesktopTouchController()
 {
     reset();
+    logInputDiagnostics(true);
     if (m_Bar) DestroyWindow(m_Bar);
+}
+
+void DesktopTouchController::observeFinger(SDL_TouchFingerEvent* event, bool direct)
+{
+    if (event->type == SDL_FINGERDOWN) ++m_ReceivedDown;
+    else if (event->type == SDL_FINGERUP) ++m_ReceivedUp;
+    else ++m_ReceivedMotion;
+    if (!direct) ++m_RejectedDevice;
+    m_DiagnosticDirty = true;
+}
+
+void DesktopTouchController::logInputDiagnostics(bool force)
+{
+    auto now = SDL_GetTicks();
+    // At most 64 periodic summaries per session plus the final summary.
+    if (!force && (!m_DiagnosticDirty || m_DiagnosticLines >= 64 || uint32_t(now - m_LastDiagnostic) < 5000)) return;
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+        "Desktop touch input: down=%u motion=%u up=%u rejectedDevice=%u pen=%u disabled=%u maxContacts=%u "
+        "wheel=%u drag=%u right=%u cancelled=%u lastCancel=%s ready=%d blocked=%d physical=%u toolbarContact=%d",
+        m_ReceivedDown, m_ReceivedMotion, m_ReceivedUp, m_RejectedDevice, m_PenEvents, m_DisabledEvents,
+        m_MaxContacts, m_WheelOutputs, m_DragOutputs, m_RightOutputs, m_Cancellations, m_LastCancelReason,
+        int(ready()), int(m_Blocked), m_PhysicalButtons, int(m_PointerActive));
+    ++m_DiagnosticLines;
+    m_LastDiagnostic = now;
+    m_DiagnosticDirty = false;
 }
 
 bool DesktopTouchController::ready() const
@@ -109,7 +141,7 @@ void DesktopTouchController::physicalKey(short code, char action, char mods, cha
 
 void DesktopTouchController::physicalMouse(int button, bool down)
 {
-    cancelGesture();
+    cancelGesture("physical-mouse");
     if (down) m_PhysicalButtons |= 1u << button;
     else m_PhysicalButtons &= ~(1u << button);
 }
@@ -150,8 +182,13 @@ void DesktopTouchController::gestureAction(DesktopTouch::DragPolicy::Action acti
     if (m_Bar) InvalidateRect(m_Bar, nullptr, FALSE);
 }
 
-void DesktopTouchController::cancelGesture()
+void DesktopTouchController::cancelGesture(const char* reason)
 {
+    if (!m_Fingers.empty() || m_LeftDown || m_MultiButton || m_DirectPending || m_Drag.holding()) {
+        ++m_Cancellations;
+        m_LastCancelReason = reason;
+        m_DiagnosticDirty = true;
+    }
     m_Gestures.cancel([this](DesktopTouch::TouchGestures::Output o) { multiAction(o); });
     m_DirectPending = false;
     m_WheelRemainder = 0;
@@ -166,7 +203,7 @@ void DesktopTouchController::cancelGesture()
 
 void DesktopTouchController::reset()
 {
-    cancelGesture();
+    cancelGesture("reset-or-focus");
     m_Fingers.clear();
     m_ContactIds.clear();
     m_NextContact = 0;
@@ -220,6 +257,10 @@ void DesktopTouchController::move(double dx, double dy)
 void DesktopTouchController::multiAction(DesktopTouch::TouchGestures::Output output)
 {
     using G = DesktopTouch::TouchGestures;
+    if (output.kind == G::Wheel) ++m_WheelOutputs;
+    if (output.kind == G::LeftDown || output.kind == G::MiddleDown) ++m_DragOutputs;
+    if (output.kind == G::RightClick) ++m_RightOutputs;
+    m_DiagnosticDirty = true;
     if (m_AbsoluteTouch && (output.kind == G::LeftDown || output.kind == G::MiddleDown || output.kind == G::RightClick)) {
         int w, h;
         SDL_GetWindowSize(m_Window, &w, &h);
@@ -276,12 +317,16 @@ bool DesktopTouchController::finger(SDL_TouchFingerEvent* event)
     for (int i = 0; i < SDL_GetNumTouchDevices(); i++) {
         const char* name = SDL_GetTouchName(i);
         if (SDL_GetTouchDevice(i) == event->touchId && name && SDL_strcmp(name, "pen") == 0) {
-            cancelGesture();
+            ++m_PenEvents;
+            cancelGesture("pen");
             return false; // Preserve the existing native pen path.
         }
     }
 #endif
-    if (!(m_AbsoluteTouch ? m_Toolbar : m_Trackpad)) return false;
+    if (!(m_AbsoluteTouch ? m_Toolbar : m_Trackpad)) {
+        ++m_DisabledEvents;
+        return false;
+    }
     auto id = std::make_pair(event->touchId, event->fingerId);
     auto sink = [this](DesktopTouch::DragPolicy::Action a) { gestureAction(a); };
     auto multiSink = [this](DesktopTouch::TouchGestures::Output o) { multiAction(o); };
@@ -293,14 +338,16 @@ bool DesktopTouchController::finger(SDL_TouchFingerEvent* event)
     if (event->type == SDL_FINGERDOWN) {
         if (m_Fingers.count(id)) return true;
         m_Fingers.insert(id);
+        m_MaxContacts = std::max(m_MaxContacts, static_cast<unsigned>(m_Fingers.size()));
         m_ContactIds[id] = ++m_NextContact;
         m_ChangingChord = m_Fingers.size() > 1;
         m_Gestures.down(m_ContactIds[id], point, now, multiSink);
         m_ChangingChord = false;
         if (!ready() || m_PhysicalButtons || m_PointerActive) {
+            const char* reason = !ready() ? "not-ready" : m_PhysicalButtons ? "physical-held" : "toolbar-contact";
             if (GetForegroundWindow() == m_Owner && !m_Input.isCaptureActive())
                 m_Input.setCaptureActive(true); // First touch only restores capture, without a host click.
-            cancelGesture();
+            cancelGesture(reason);
             return true;
         }
         if (m_Blocked) return true;
@@ -375,6 +422,7 @@ bool DesktopTouchController::finger(SDL_TouchFingerEvent* event)
 
 void DesktopTouchController::tick()
 {
+    logInputDiagnostics();
     if (!ready()) {
         reset();
         layout();
@@ -491,7 +539,7 @@ void DesktopTouchController::layout()
     RECT current{};
     GetWindowRect(m_Bar, &current);
     if (current.left != x || current.top != y || current.right - current.left != width || current.bottom - current.top != height) {
-        cancelGesture();
+        cancelGesture("toolbar-layout");
         SetWindowPos(m_Bar, HWND_TOP, x, y, width, height, SWP_NOACTIVATE);
         InvalidateRect(m_Bar, nullptr, FALSE);
     }
@@ -637,8 +685,9 @@ LRESULT CALLBACK DesktopTouchController::windowProc(HWND hwnd, UINT msg, WPARAM 
     case WM_LBUTTONDOWN:
     case WM_MOUSEMOVE:
     case WM_LBUTTONUP:
-        // Windows touch-promoted mouse messages must not activate a button twice.
-        if ((GetMessageExtraInfo() & 0xFFFFFF80) == 0xFF515700) return 0;
+        // WM_TOUCH handles touch and pen. Their promoted mouse messages must
+        // never take capture or start a second toolbar contact.
+        if (DesktopTouch::isPointerPromotedMouse(static_cast<uintptr_t>(GetMessageExtraInfo()))) return 0;
         if (msg == WM_LBUTTONDOWN) {
             SetCapture(hwnd);
             self->pointer(0, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));

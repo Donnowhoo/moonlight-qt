@@ -24,9 +24,10 @@ public:
     ~DesktopTouchController();
     bool valid() const { return m_Bar != nullptr; }
     bool finger(SDL_TouchFingerEvent* event);
+    void observeFinger(SDL_TouchFingerEvent* event, bool direct);
     void tick();
     void reset();
-    void cancelGesture();
+    void cancelGesture(const char* reason = "action");
     void physicalKey(short key, char action, char modifiers, char flags);
     void physicalMouse(int button, bool down);
     void finishClick() { if (!m_LeftDown) clearOneShot(); }
@@ -46,6 +47,7 @@ private:
     void multiAction(DesktopTouch::TouchGestures::Output output);
     bool ready() const;
     int hit(int x, int y) const;
+    void logInputDiagnostics(bool force = false);
 
     SdlInputHandler& m_Input;
     SDL_Window* m_Window;
@@ -82,5 +84,14 @@ private:
     bool m_PointerActive = false, m_PointerMoved = false;
     DWORD m_TouchId = 0;
     std::vector<int> m_Actions;
+    // Bounded counters only: never record coordinates, typed text or device IDs.
+    unsigned m_ReceivedDown = 0, m_ReceivedMotion = 0, m_ReceivedUp = 0;
+    unsigned m_RejectedDevice = 0, m_PenEvents = 0, m_DisabledEvents = 0;
+    unsigned m_MaxContacts = 0, m_Cancellations = 0;
+    unsigned m_WheelOutputs = 0, m_DragOutputs = 0, m_RightOutputs = 0;
+    unsigned m_DiagnosticLines = 0;
+    uint32_t m_LastDiagnostic = 0;
+    bool m_DiagnosticDirty = false;
+    const char* m_LastCancelReason = "none";
 };
 #endif

@@ -58,10 +58,21 @@ class DesktopTouchGuards(unittest.TestCase):
 
     def test_toolbar_consumes_touch_and_does_not_activate(self):
         code = source("app/streaming/input/desktoptouch.cpp")
-        for guard in ("WS_EX_NOACTIVATE", "MA_NOACTIVATE", "CloseTouchInputHandle", "SWP_NOACTIVATE", "0xFF515700"):
+        for guard in ("WS_EX_NOACTIVATE", "MA_NOACTIVATE", "CloseTouchInputHandle", "SWP_NOACTIVATE", "DesktopTouch::isPointerPromotedMouse"):
             self.assertIn(guard, code)
         self.assertNotIn("HTTRANSPARENT", code)
         self.assertNotIn("SetForegroundWindow", code)
+
+    def test_input_diagnostics_precede_device_filter_and_are_bounded(self):
+        code = source("app/streaming/input/input.cpp").split("void SdlInputHandler::handleTouchFingerEvent", 1)[1]
+        self.assertLess(code.index("observeFinger"), code.index("!= SDL_TOUCH_DEVICE_DIRECT"))
+        diagnostics = source("app/streaming/input/desktoptouch.cpp").split("void DesktopTouchController::logInputDiagnostics", 1)[1].split("bool DesktopTouchController::ready", 1)[0]
+        self.assertIn("m_DiagnosticLines >= 64", diagnostics)
+        self.assertIn("< 5000", diagnostics)
+        self.assertIn("maxContacts=", diagnostics)
+        self.assertIn("lastCancel=", diagnostics)
+        for private in ("event->x", "event->y", "fingerId", "touchId"):
+            self.assertNotIn(private, diagnostics)
 
     def test_actions_and_modifier_bounds(self):
         code = source("app/streaming/input/desktoptouch.cpp")
