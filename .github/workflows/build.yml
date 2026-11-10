@@ -27,12 +27,14 @@ jobs:
           echo "ci_version=${CI_VERSION}" >> "${GITHUB_OUTPUT}"
 
   build-appimage:
+    if: github.ref != 'refs/heads/dual-monitor'
     needs: setup
     uses: ./.github/workflows/build-appimage.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
 
   build-steamlink:
+    if: github.ref != 'refs/heads/dual-monitor'
     needs: setup
     uses: ./.github/workflows/build-steamlink.yml
     with:

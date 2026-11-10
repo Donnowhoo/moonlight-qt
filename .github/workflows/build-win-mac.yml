@@ -17,13 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Windows
-          - os: windows-2025
-            qt_version: 6.12.0
-          # macOS
-          - os: macos-26
-            qt_version: 6.11.2
+        include: ${{ fromJSON(github.ref == 'refs/heads/dual-monitor' && '[{"os":"windows-2025","qt_version":"6.12.0"}]' || '[{"os":"windows-2025","qt_version":"6.12.0"},{"os":"macos-26","qt_version":"6.11.2"}]') }}
 
     runs-on: ${{ matrix.os }}
 
@@ -55,7 +49,7 @@ jobs:
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@073e34d7c2ab4ae6961ed7cca690b3abd5ba5a7e'
 
       - name: Install Qt ARM64 (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.ref != 'refs/heads/dual-monitor'
         uses: jurplel/install-qt-action@v4
         with:
           cache: true
@@ -74,7 +68,7 @@ jobs:
           QT_PATH: ${{ runner.workspace }}\Qt\${{ matrix.qt_version }}\msvc2022_64\bin
 
       - name: Build ARM64 binaries (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.ref != 'refs/heads/dual-monitor'
         shell: cmd
         run: |
           set "PATH=%QT_PATH%;%PATH%"
@@ -83,6 +77,8 @@ jobs:
           QT_PATH: ${{ runner.workspace }}\Qt\${{ matrix.qt_version }}\msvc2022_arm64\bin
 
       - name: Build Package
+        # The dual-monitor release uses the x64 portable files, not the multi-arch installer.
+        if: github.ref != 'refs/heads/dual-monitor'
         shell: pwsh
         run: |
           if ($Env:RUNNER_OS -eq "Windows") {
@@ -101,7 +97,7 @@ jobs:
 
       - name: Upload Binaries (Windows arm64)
         uses: actions/upload-artifact@v6
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.ref != 'refs/heads/dual-monitor'
         with:
           name: Moonlight-${{ runner.os }}-arm64-${{ env.CI_VERSION }}
           path: build/deploy-arm64-release/*
