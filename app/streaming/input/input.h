@@ -160,6 +160,10 @@ public:
     bool desktopAbsoluteMouseMode() const { return m_AbsoluteMouseMode; }
     bool hasDesktopTouch() const;
     void finishDesktopTouchClick();
+#ifdef Q_OS_WIN32
+    void writeDesktopTouchDiagnostic(const QString& message);
+    QString desktopTouchDiagnosticPath() const { return m_TouchDiagnosticPath; }
+#endif
 
     static
     QString getUnmappedGamepads();
@@ -167,6 +171,8 @@ public:
 private:
 #ifdef Q_OS_WIN32
     DesktopTouchController* m_DesktopTouch = nullptr;
+    DesktopTouch::DiagnosticFile m_TouchDiagnostic;
+    QString m_TouchDiagnosticPath;
     bool m_DesktopToolbarEnabled = false;
     bool m_DesktopTrackpadEnabled = false;
 #endif

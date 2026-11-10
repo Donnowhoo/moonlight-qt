@@ -5,6 +5,7 @@
 #include "SDL_compat.h"
 #include "touchpolicy.h"
 #include "touchgestures.h"
+#include "touchdiagnostics.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -32,6 +33,7 @@ public:
     void physicalMouse(int button, bool down);
     void finishClick() { if (!m_LeftDown) clearOneShot(); }
 private:
+    static void SDLCALL observeWindowsMessage(void*, void*, unsigned int, Uint64, Sint64);
     static LRESULT CALLBACK windowProc(HWND, UINT, WPARAM, LPARAM);
     void pointer(int phase, int x, int y);
     void paint();
@@ -93,5 +95,9 @@ private:
     uint32_t m_LastDiagnostic = 0;
     bool m_DiagnosticDirty = false;
     const char* m_LastCancelReason = "none";
+    bool m_MessageObserverInstalled = false;
+    unsigned m_NativeDown = 0, m_NativeUp = 0, m_NativeMotion = 0, m_NativeMax = 0;
+    unsigned m_NativeReadErrors = 0, m_PointerMessages = 0, m_NativeMessages = 0;
+    std::set<std::pair<uintptr_t, DWORD>> m_NativeContacts;
 };
 #endif

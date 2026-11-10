@@ -5,6 +5,7 @@
 #include "streaming/streamutils.h"
 #include <Limelight.h>
 #include <SDL_syswm.h>
+#include <SDL_system.h>
 #include <QSettings>
 #include <algorithm>
 #include <cmath>
@@ -18,7 +19,7 @@ const wchar_t* labels[] = {
     L"\uc774\ub3d9", L"\ub354\ubcf4\uae30", L"\ud0a4\ubcf4\ub4dc", L"\ubcf5\uc0ac", L"\ubd99\uc5ec\ub123\uae30", L"\uc2e4\ud589\ucde8\uc18c",
     L"\uc798\ub77c\ub0b4\uae30", L"\ub2e4\uc2dc\uc2e4\ud589", L"\uc800\uc7a5", L"\uc804\uccb4\uc120\ud0dd", L"Esc \ucde8\uc18c", L"Tab \uc774\ub3d9",
     L"Enter", L"\uc0ad\uc81c", L"F2 \uc774\ub984", L"\u2190 \uc67c\ucabd", L"\u2191 \uc704", L"\u2192 \uc624\ub978\ucabd",
-    L"\u2193 \uc544\ub798", L"\uc6b0\ud074\ub9ad\n\ub2e4\uc74c \ud130\uce58", L"Ctrl", L"Shift", L"Alt", L"\ud130\uce58 \ubc29\uc2dd", L"\uc804\uccb4 \ud574\uc81c"
+    L"\u2193 \uc544\ub798", L"\uc6b0\ud074\ub9ad\n\ub2e4\uc74c \ud130\uce58", L"Ctrl", L"Shift", L"Alt", L"\ud130\uce58 \ubc29\uc2dd", L"\uc804\uccb4 \ud574\uc81c", L"\uc9c4\ub2e8 \ub85c\uadf8"
 };
 constexpr unsigned modifierKeys[] = {0xA2, 0xA0, 0xA4};
 constexpr int buttonCount = sizeof(labels) / sizeof(labels[0]);
@@ -31,7 +32,10 @@ DesktopTouchController::DesktopTouchController(SdlInputHandler& input, SDL_Windo
 {
     SDL_SysWMinfo info{};
     SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_WINDOWS) return;
+    if (!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_WINDOWS) {
+        m_Input.writeDesktopTouchDiagnostic("Desktop touch input: initialization failed at window-info");
+        return;
+    }
     m_Owner = info.info.win.window;
     QSettings settings;
     m_X = settings.value("desktoptouch/x", 0.02).toDouble();
@@ -47,26 +51,70 @@ DesktopTouchController::DesktopTouchController(SdlInputHandler& input, SDL_Windo
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"MoonlightDesktopTouchBar";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        m_Input.writeDesktopTouchDiagnostic(QString("Desktop touch input: window-class failure=%1").arg(GetLastError()));
+        return;
+    }
     m_Bar = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, wc.lpszClassName,
                            L"Moonlight touch shortcuts", WS_POPUP, 0, 0, 1, 1,
                            m_Owner, nullptr, wc.hInstance, this);
-    if (!m_Bar) return;
-    RegisterTouchWindow(m_Bar, 0);
+    if (!m_Bar) {
+        m_Input.writeDesktopTouchDiagnostic(QString("Desktop touch input: toolbar-window failure=%1").arg(GetLastError()));
+        return;
+    }
+    if (!RegisterTouchWindow(m_Bar, 0))
+        m_Input.writeDesktopTouchDiagnostic(QString("Desktop touch input: toolbar-registration failure=%1").arg(GetLastError()));
+    SDL_SetWindowsMessageHook(observeWindowsMessage, this);
+    m_MessageObserverInstalled = true;
     layout();
     SDL_version version{};
     SDL_GetVersion(&version);
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-        "Desktop touch input: SDL=%u.%u.%u toolbar=%d trackpad=%d direct=%d streamTouchRegistered=%d",
-        unsigned(version.major), unsigned(version.minor), unsigned(version.patch),
-        int(m_Toolbar), int(m_Trackpad), int(m_AbsoluteTouch), int(IsTouchWindow(m_Owner, nullptr)));
+    m_Input.writeDesktopTouchDiagnostic(QString("Desktop touch input: SDL=%1.%2.%3 streamTouchRegistered=%4")
+        .arg(version.major).arg(version.minor).arg(version.patch).arg(IsTouchWindow(m_Owner, nullptr) != FALSE));
 }
 
 DesktopTouchController::~DesktopTouchController()
 {
-    reset();
+    if (m_MessageObserverInstalled) SDL_SetWindowsMessageHook(nullptr, nullptr);
     logInputDiagnostics(true);
+    reset();
     if (m_Bar) DestroyWindow(m_Bar);
+}
+
+void SDLCALL DesktopTouchController::observeWindowsMessage(void* userdata, void* window,
+        unsigned int message, Uint64 wParam, Sint64 lParam)
+{
+    auto self = static_cast<DesktopTouchController*>(userdata);
+    if (window != self->m_Owner) return; // Do not count contacts on the toolbar.
+    ++self->m_NativeMessages;
+    if (message == WM_KILLFOCUS) self->m_NativeContacts.clear();
+    if (message == WM_POINTERDOWN || message == WM_POINTERUP || message == WM_POINTERUPDATE) {
+        ++self->m_PointerMessages;
+        self->m_DiagnosticDirty = true;
+    }
+    if (message != WM_TOUCH) return;
+    unsigned count = LOWORD(wParam);
+    std::vector<TOUCHINPUT> contacts(count);
+    if (!GetTouchInputInfo(reinterpret_cast<HTOUCHINPUT>(static_cast<intptr_t>(lParam)), count,
+                          contacts.data(), sizeof(TOUCHINPUT))) {
+        ++self->m_NativeReadErrors;
+    }
+    else for (const auto& contact : contacts) {
+        if (contact.dwFlags & TOUCHEVENTF_PEN) continue;
+        auto id = std::make_pair(reinterpret_cast<uintptr_t>(contact.hSource), contact.dwID);
+        if (contact.dwFlags & TOUCHEVENTF_DOWN) {
+            ++self->m_NativeDown;
+            self->m_NativeContacts.insert(id);
+            self->m_NativeMax = std::max(self->m_NativeMax, static_cast<unsigned>(self->m_NativeContacts.size()));
+        }
+        if (contact.dwFlags & TOUCHEVENTF_MOVE) ++self->m_NativeMotion;
+        if (contact.dwFlags & TOUCHEVENTF_UP) {
+            ++self->m_NativeUp;
+            self->m_NativeContacts.erase(id);
+        }
+    }
+    // Observation only. SDL still owns dispatch and closes the touch handle.
+    self->m_DiagnosticDirty = true;
 }
 
 void DesktopTouchController::observeFinger(SDL_TouchFingerEvent* event, bool direct)
@@ -83,12 +131,16 @@ void DesktopTouchController::logInputDiagnostics(bool force)
     auto now = SDL_GetTicks();
     // At most 64 periodic summaries per session plus the final summary.
     if (!force && (!m_DiagnosticDirty || m_DiagnosticLines >= 64 || uint32_t(now - m_LastDiagnostic) < 5000)) return;
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+    char summary[1024]{};
+    SDL_snprintf(summary, sizeof(summary),
         "Desktop touch input: down=%u motion=%u up=%u rejectedDevice=%u pen=%u disabled=%u maxContacts=%u "
         "wheel=%u drag=%u right=%u cancelled=%u lastCancel=%s ready=%d blocked=%d physical=%u toolbarContact=%d",
         m_ReceivedDown, m_ReceivedMotion, m_ReceivedUp, m_RejectedDevice, m_PenEvents, m_DisabledEvents,
         m_MaxContacts, m_WheelOutputs, m_DragOutputs, m_RightOutputs, m_Cancellations, m_LastCancelReason,
         int(ready()), int(m_Blocked), m_PhysicalButtons, int(m_PointerActive));
+    m_Input.writeDesktopTouchDiagnostic(QString::fromUtf8(summary));
+    m_Input.writeDesktopTouchDiagnostic(QString("Desktop touch native: down=%1 motion=%2 up=%3 maxContacts=%4 readErrors=%5 pointerMessages=%6 observedMessages=%7")
+        .arg(m_NativeDown).arg(m_NativeMotion).arg(m_NativeUp).arg(m_NativeMax).arg(m_NativeReadErrors).arg(m_PointerMessages).arg(m_NativeMessages));
     ++m_DiagnosticLines;
     m_LastDiagnostic = now;
     m_DiagnosticDirty = false;
@@ -444,6 +496,13 @@ void DesktopTouchController::tick()
 void DesktopTouchController::action(int index)
 {
     if (index == 0) return;
+    if (index == 25) {
+        logInputDiagnostics(true);
+        reset();
+        const auto path = m_Input.desktopTouchDiagnosticPath().toStdWString();
+        if (!path.empty()) ShellExecuteW(m_Owner, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
     if (!m_Toolbar) { cancelGesture(); return; }
     if (index == 1) {
         m_Collapsed = !m_Collapsed;
@@ -632,6 +691,7 @@ void DesktopTouchController::paint()
         DeleteObject(brush);
         SetTextColor(dc, RGB(245, 248, 255));
         std::wstring label = labels[i];
+        if (i == 25 && m_Input.desktopTouchDiagnosticPath().isEmpty()) label = L"\ub85c\uadf8 \uc0dd\uc131\n\uc2e4\ud328";
         if (i == 0 && m_MultiButton) label = m_MultiButton == BUTTON_MIDDLE ? L"\uac00\uc6b4\ub370\n\ub04c\uae30" : L"\uc67c\ucabd\n\ub04c\uae30";
         if (i == 2 && m_KeyboardFailed) label = L"OSK\nError";
         if (i == 0 && m_Drag.holding()) label = L"\ub04c\uae30 \uc911\n\uc774\ub3d9";

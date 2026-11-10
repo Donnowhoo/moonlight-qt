@@ -391,7 +391,7 @@ config_SL {
 win32 {
     HEADERS += streaming/video/ffmpeg-renderers/dxutil.h
     SOURCES += streaming/input/desktoptouch.cpp
-    HEADERS += streaming/input/desktoptouch.h streaming/input/touchpolicy.h streaming/input/touchgestures.h
+    HEADERS += streaming/input/desktoptouch.h streaming/input/touchpolicy.h streaming/input/touchgestures.h streaming/input/touchdiagnostics.h
     LIBS += shell32.lib
 }
 win32:!winrt {

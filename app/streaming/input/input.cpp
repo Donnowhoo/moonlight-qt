@@ -8,6 +8,7 @@
 #include <QtGlobal>
 #include <QDir>
 #include <QGuiApplication>
+#include <QDateTime>
 
 SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, int streamHeight)
     : m_MultiController(prefs.multiController),
@@ -277,6 +278,16 @@ void SdlInputHandler::setWindow(SDL_Window *window)
 {
     m_Window = window;
 #ifdef Q_OS_WIN32
+    // Start before the feature gate or controller creation: their failures must
+    // remain visible even when no finger reaches the enhanced input handler.
+    m_TouchDiagnosticPath = QDir::temp().filePath(QString("Moonlight-touch-input-%1-%2.log")
+        .arg(QCoreApplication::applicationPid()).arg(QDateTime::currentMSecsSinceEpoch()));
+    if (!m_TouchDiagnostic.open(std::filesystem::path(m_TouchDiagnosticPath.toStdWString()))) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot open desktop touch diagnostic file");
+        m_TouchDiagnosticPath.clear();
+    }
+    writeDesktopTouchDiagnostic(QString("Desktop touch input: version=%1 toolbar=%2 trackpad=%3 direct=%4 stage=setWindow")
+        .arg(QCoreApplication::applicationVersion()).arg(m_DesktopToolbarEnabled).arg(m_DesktopTrackpadEnabled).arg(m_AbsoluteTouchMode));
     if (m_DesktopToolbarEnabled || m_DesktopTrackpadEnabled) {
         m_DesktopTouch = new DesktopTouchController(*this, window, m_DesktopToolbarEnabled,
             m_DesktopTrackpadEnabled, m_AbsoluteTouchMode, m_StreamWidth, m_StreamHeight);
@@ -286,8 +297,16 @@ void SdlInputHandler::setWindow(SDL_Window *window)
             m_DesktopTouch = nullptr;
         }
     }
+    writeDesktopTouchDiagnostic(QString("Desktop touch input: stage=controller active=%1").arg(m_DesktopTouch != nullptr));
 #endif
 }
+
+#ifdef Q_OS_WIN32
+void SdlInputHandler::writeDesktopTouchDiagnostic(const QString& message)
+{
+    m_TouchDiagnostic.write(message.toUtf8().toStdString());
+}
+#endif
 
 bool SdlInputHandler::hasDesktopTouch() const
 {

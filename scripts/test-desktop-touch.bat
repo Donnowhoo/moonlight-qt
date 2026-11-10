@@ -12,5 +12,9 @@ cl /nologo /std:c++17 /EHsc /W4 /WX /utf-8 /UNDEBUG tests\desktop_touch_policy_t
 if errorlevel 1 exit /b 1
 build\touch-policy-tests\policy.exe
 if errorlevel 1 exit /b 1
+cl /nologo /std:c++17 /EHsc /W4 /WX /utf-8 /UNDEBUG tests\desktop_touch_diagnostics_test.cpp /Fobuild\touch-policy-tests\diagnostics.obj /Febuild\touch-policy-tests\diagnostics.exe
+if errorlevel 1 exit /b 1
+build\touch-policy-tests\diagnostics.exe
+if errorlevel 1 exit /b 1
 python tests\test_desktop_touch_guards.py
 exit /b %errorlevel%

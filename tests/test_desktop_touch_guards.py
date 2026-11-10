@@ -74,6 +74,26 @@ class DesktopTouchGuards(unittest.TestCase):
         for private in ("event->x", "event->y", "fingerId", "touchId"):
             self.assertNotIn(private, diagnostics)
 
+    def test_dedicated_file_starts_before_controller_gate(self):
+        code = source("app/streaming/input/input.cpp").split("void SdlInputHandler::setWindow", 1)[1]
+        self.assertLess(code.index("m_TouchDiagnostic.open"), code.index("if (m_DesktopToolbarEnabled"))
+        self.assertLess(code.index("stage=setWindow"), code.index("new DesktopTouchController"))
+        self.assertIn('QDir::temp().filePath', code)
+        writer = source("app/streaming/input/touchdiagnostics.h")
+        self.assertIn("stream.flush()", writer)
+        self.assertNotIn("SDL_Log", writer)
+        self.assertIn("lines >= 256", writer)
+
+    def test_native_observer_does_not_consume_or_inject_input(self):
+        code = source("app/streaming/input/desktoptouch.cpp")
+        observer = code.split("void SDLCALL DesktopTouchController::observeWindowsMessage", 1)[1].split("void DesktopTouchController::observeFinger", 1)[0]
+        self.assertIn("window != self->m_Owner", observer)
+        self.assertIn("GetTouchInputInfo", observer)
+        for forbidden in ("CloseTouchInputHandle", "LiSend", "SetCapture", "finger(", "RegisterTouchWindow"):
+            self.assertNotIn(forbidden, observer)
+        self.assertIn("SDL_SetWindowsMessageHook(nullptr, nullptr)", code)
+        self.assertIn("m_Input.desktopTouchDiagnosticPath()", code)
+
     def test_actions_and_modifier_bounds(self):
         code = source("app/streaming/input/desktoptouch.cpp")
         self.assertEqual(code.count("i >= 20 && i <= 22 && m_Modifiers[i - 20]"), 2)
