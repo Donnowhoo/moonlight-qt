@@ -1,5 +1,16 @@
 # Windows 터치 조작 — 로컬 구현 결과 (2026-11-10)
 
+## 승인 후 Windows x64 CI 결과
+
+기능 커밋 `18ec62fd24589aca7c026d801a5a675745e351d6`를 `dual-monitor`에 게시했다.
+[GitHub Actions 42835774392](https://github.com/Donnowhoo/moonlight-qt/actions/runs/42835774392)는 성공했다.
+MSVC 순수 정책 37개 시나리오, 정적 보호 검사 10개, Windows x64 앱 빌드·ZIP 게시를 통과했다.
+ARM64/macOS/Linux/Steam Link는 빌드하지 않았다.
+릴리스 파일: `Moonlight-DualMonitor-Windows-x64-portable.zip`.
+GitHub SHA256: `9ace72bddfe300c3f2ec3a9b1fbc8ef9cf7fae09d015eef3e5f252e85aadc09f`.
+Qt/ENet 및 기존 FFmpeg 경로의 비차단 경고가 남아 있다. 실물 터치·OSK 포커스·한글 입력은 미검증이다.
+앱 실행·설치는 David가 직접 한다. 아래 로컬 검토 시점의 ‘전체 빌드 미실시’는 과거 기록이며, 이번 CI 성공과 구분한다.
+
 대상은 GalaxyBook5 Pro 360 같은 Windows 터치 PC의 Moonlight입니다. 이 문서는 **최종 사용자 교정: 손가락을 떼면 즉시 끌기 종료**를 반영합니다. 이전의 손 떼고 재배치, 드래그 잠금, 5초 유지 설계는 폐기했습니다. Ctrl/Shift/Alt의 선택적 고정과 마우스 끌기 잠금은 다른 기능입니다.
 
 ## 범위와 상태
